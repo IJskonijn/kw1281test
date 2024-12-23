@@ -99,6 +99,13 @@ Usage: KW1281Test PORT BAUD ADDRESS COMMAND [args]
         WriteEeprom ADDRESS VALUE
             ADDRESS = Address in decimal (e.g. 4361) or hex (e.g. $1109)
             VALUE = Value in decimal (e.g. 138) or hex (e.g. $8A)
+
+Usage special mileage utils: KW1281Test COMMAND [arg]
+    COMMAND =
+        MileageDecimalToHex MILEAGE
+            MILEAGE = Odometer value in decimal (e.g. 123456)
+        MileageHexToDecimal MILEAGE
+            MILEAGE = Odometer value in hex (e.g. FFFF FFFF FFFF FFFF FFFF FFFF FFFF FFFF)
 ```
 
 ##### Credits

@@ -221,9 +221,9 @@ namespace BitFab.KW1281Test
             var hexValues = input.Split(' ').ToList();
             var inputLength = hexValues.Count;
 
-            if (inputLength != 8 && inputLength != 16)
+            if (inputLength != 1 && inputLength != 8 && inputLength != 16 || input.Trim().Length != 32)
             {
-                throw new ArgumentException("Input must contain 8 or 16 values separated by space.");
+                throw new ArgumentException("Input must be 32 characters and in one of the following formats: 'FFFFFFFF...', 'FFFF FFFF F...', 'FF FF FF FF F...'.");
             }
 
             if (inputLength == 16)
@@ -233,7 +233,14 @@ namespace BitFab.KW1281Test
                     hexValues[i / 2] = hexValues[i] + hexValues[i + 1];
                 }
                 hexValues = hexValues.Take(8).ToList();
-            }            
+            }
+            else if (inputLength == 1)
+            {
+                var chunkSize = 4;
+                hexValues = Enumerable.Range(0, (input.Length + chunkSize - 1) / chunkSize)
+                                      .Select(i => input.Substring(i * chunkSize, Math.Min(chunkSize, input.Length - i * chunkSize)))
+                                      .ToList();
+            }
 
             // Sum the bitwise inverted 16-bit signed integers
             int sum = hexValues.Select(hex => ~BitConverter.ToInt16(new byte[] {

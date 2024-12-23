@@ -7,13 +7,11 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
-using BitFab.KW1281Test.EDC15;
 
 [assembly: InternalsVisibleTo("BitFab.KW1281Test.Tests")]
 
@@ -50,6 +48,21 @@ namespace BitFab.KW1281Test
 
             if (args.Length < 4)
             {
+                if (args.Length == 2 && args[0].Contains("mileage", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(args[0], nameof(Utils.MileageHexToDecimal), StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        Log.WriteLine($"Output mileage in decimal: {Utils.MileageHexToDecimal(args[1])}");
+                    }
+                    else if (string.Equals(args[0], nameof(Utils.MileageDecimalToHex), StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        Log.WriteLine($"Output mileage in hex: {Utils.MileageDecimalToHex(int.Parse(args[1]))}");
+                    }
+
+                    // Rest of the program needs more than 2 arguments, so return here
+                    return;
+                }
+
                 ShowUsage();
                 return;
             }
@@ -307,9 +320,7 @@ namespace BitFab.KW1281Test
             addressValuePairs = [];
 
             if (addressesAndValues.Count % 2 != 0)
-            {
                 return false;
-            }
 
             for (var i = 0; i < addressesAndValues.Count; i += 2)
             {
@@ -393,7 +404,7 @@ namespace BitFab.KW1281Test
             // VAG eeprom programmer 1.19g says: 284489
             var test3 = Utils.MileageHexToDecimal("8ABA 8ABA 8ABA 8ABA 8BBA 8BBA 8BBA 8BBA");
             var test4 = Utils.MileageHexToDecimal("8A BA 8A BA 8A BA 8A BA 8B BA 8B BA 8B BA 8B BA");
-            
+
             var hex = Utils.MileageDecimalToHex(284488);
             var dec = Utils.MileageHexToDecimal(hex);
 
@@ -402,7 +413,8 @@ namespace BitFab.KW1281Test
 
         private static void ShowUsage()
         {
-            Log.WriteLine(@"Usage: KW1281Test PORT BAUD ADDRESS COMMAND [args]
+            Log.WriteLine(@"
+Usage: KW1281Test PORT BAUD ADDRESS COMMAND [args]
     PORT = COM1|COM2|etc.
     BAUD = 10400|9600|etc.
     ADDRESS = The controller address, e.g. 1 (ECU), 17 (cluster), 46 (CCM), 56 (radio)
@@ -477,6 +489,14 @@ namespace BitFab.KW1281Test
         WriteEeprom ADDRESS VALUE
             ADDRESS = Address in decimal (e.g. 4361) or hex (e.g. $1109)
             VALUE = Value in decimal (e.g. 138) or hex (e.g. $8A)");
+
+            Log.WriteLine(@"
+Usage special mileage utils: KW1281Test COMMAND [arg]
+    COMMAND =
+        MileageDecimalToHex MILEAGE
+            MILEAGE = Odometer value in decimal (e.g. 123456)
+        MileageHexToDecimal MILEAGE
+            MILEAGE = Odometer value in hex (e.g. FFFF FFFF FFFF FFFF FFFF FFFF FFFF FFFF)");
         }
     }
 }

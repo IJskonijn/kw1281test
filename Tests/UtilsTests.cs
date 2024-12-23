@@ -44,6 +44,25 @@ public class UtilsTests
     }
 
     [TestMethod]
+    public void MileageHexToDecimal_ValidString1_ReturnsInteger()
+    {
+        // Source: https://github.com/gmenounos/vwcluster/blob/main/Odometer.md
+        var mileageInDecimal = Utils.MileageHexToDecimal("fdfffdfffefffefffefffefffefffeff");
+
+        // 0x49, 0xE8, 0x49, 0xE8, 0x49, 0xE8, 0x49, 0xE8, 0x49, 0xE8, 0x49, 0xE8, 0x4A, 0xE8, 0x4A, 0xE8
+        // VAG eeprom programmer 1.19g says: 97117
+        var mileageInDecimal1 = Utils.MileageHexToDecimal("49e849e849e849e849e849e84ae84ae8");
+
+        // 0x8A, 0xBA, 0x8A, 0xBA, 0x8A, 0xBA, 0x8A, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA
+        // VAG eeprom programmer 1.19g says: 284489
+        var mileageInDecimal2 = Utils.MileageHexToDecimal("8ABA8ABA8ABA8ABA8BBA8BBA8BBA8BBA");
+
+        mileageInDecimal.Should().Be(20);
+        mileageInDecimal1.Should().Be(97116);
+        mileageInDecimal2.Should().Be(284488);
+    }
+
+    [TestMethod]
     public void MileageDecimalToHex_ValidInt_ReturnsHexString()
     {
         // Source: https://github.com/gmenounos/vwcluster/blob/main/Odometer.md
