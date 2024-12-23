@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "kw1281test": {
+      "commandName": "Project",
+      "commandLineArgs": "test test test"
+    }
+  }
+}

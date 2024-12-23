@@ -43,7 +43,41 @@ namespace BitFab.KW1281Test
             }
         }
 
-        void Run(string[] args)
+        private void Run(string[] args)
+        {
+            // Initial Setup
+            DisplayInitialInfo(args);
+
+            if (args.Length < 4)
+            {
+                ShowUsage();
+                return;
+            }
+
+            // Try setting the process priority
+            TrySetRealTimeProcessPriority();
+
+            string portName = args[0];
+            int baudRate = int.Parse(args[1]);
+            int controllerAddress = int.Parse(args[2], NumberStyles.HexNumber);
+            string command = args[3];
+
+            // Parse command-specific arguments
+            var (address, length, value, softwareCoding, workshopCode, addressValuePairs, channel, channelValue, login, groupNumber, filename) = ParseCommandArguments(command, args);
+
+            using var @interface = OpenPort(portName, baudRate);
+            var tester = new Tester(@interface, controllerAddress);
+
+            // Execute Command
+            if (!ExecuteCommand(command.ToLower(), tester, address, length, value, softwareCoding, workshopCode, addressValuePairs, channel, channelValue, login, groupNumber, filename))
+            {
+                ShowUsage();
+            }
+
+            tester.EndCommunication();
+        }
+
+        private void DisplayInitialInfo(string[] args)
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.Write("KW1281Test: Yesterday's diagnostics...");
@@ -61,365 +95,203 @@ namespace BitFab.KW1281Test
             Log.WriteLine($"OSVersion: {Environment.OSVersion}");
             Log.WriteLine($".NET Version: {Environment.Version}");
             Log.WriteLine($"Culture: {CultureInfo.InstalledUICulture}");
+        }
 
-            if (args.Length < 4)
-            {
-                ShowUsage();
-                return;
-            }
-
+        private static void TrySetRealTimeProcessPriority()
+        {
             try
             {
                 // This seems to increase the accuracy of our timing loops
                 Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
             }
-            catch(Win32Exception)
+            catch (Win32Exception)
             {
                 // Ignore if we don't have permission to increase our priority
             }
+        }
 
-            string portName = args[0];
-            var baudRate = int.Parse(args[1]);
-            int controllerAddress = int.Parse(args[2], NumberStyles.HexNumber);
-            var command = args[3];
-            uint address = 0;
-            uint length = 0;
-            byte value = 0;
-            int softwareCoding = 0;
-            int workshopCode = 0;
-            byte channel = 0;
+        private static CommandArguments ParseCommandArguments(string command, string[] args)
+        {
+            uint address = 0, length = 0;
+            int softwareCoding = 0, workshopCode = 0;
+            byte channel = 0, groupNumber = 0, value = 0;
             ushort channelValue = 0;
             ushort? login = null;
-            byte groupNumber = 0;
             var addressValuePairs = new List<KeyValuePair<ushort, byte>>();
+            string? filename = null;
 
-            if (string.Compare(command, "ReadEeprom", ignoreCase: true) == 0 ||
-                string.Compare(command, "ReadRAM", ignoreCase: true) == 0 ||
-                string.Compare(command, "ReadROM", ignoreCase: true) == 0)
-            {
-                if (args.Length < 5)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                address = Utils.ParseUint(args[4]);
-            }
-            else if (string.Compare(command, "DumpMarelliMem", ignoreCase: true) == 0 ||
-                     string.Compare(command, "DumpEeprom", ignoreCase: true) == 0 ||
-                     string.Compare(command, "DumpMem", ignoreCase: true) == 0 ||
-                     string.Compare(command, "DumpRam", ignoreCase: true) == 0 ||
-                     string.Compare(command, "DumpRBxMem", ignoreCase: true) == 0 ||
-                     string.Compare(command, "DumpRBxMemOdd", ignoreCase: true) == 0)
-            {
-                if (args.Length < 6)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                address = Utils.ParseUint(args[4]);
-                length = Utils.ParseUint(args[5]);
-
-                if (args.Length > 6)
-                {
-                    _filename = args[6];
-                }
-            }
-            else if (string.Compare(command, "WriteEeprom", ignoreCase: true) == 0)
-            {
-                if (args.Length < 6)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                address = Utils.ParseUint(args[4]);
-                value = (byte)Utils.ParseUint(args[5]);
-            }
-            else if (string.Compare(command, "LoadEeprom", ignoreCase: true) == 0)
-            {
-                if (args.Length < 6)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                address = Utils.ParseUint(args[4]);
-                _filename = args[5];
-            }
-            else if (string.Compare(command, "SetSoftwareCoding", ignoreCase: true) == 0)
-            {
-                if (args.Length < 6)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                softwareCoding = (int)Utils.ParseUint(args[4]);
-                if (softwareCoding > 32767)
-                {
-                    Log.WriteLine("SoftwareCoding cannot be greater than 32767.");
-                    return;
-                }
-                workshopCode = (int)Utils.ParseUint(args[5]);
-                if (workshopCode > 99999)
-                {
-                    Log.WriteLine("WorkshopCode cannot be greater than 99999.");
-                    return;
-                }
-            }
-            else if (string.Compare(command, "DumpEdc15Eeprom", ignoreCase: true) == 0)
-            {
-                if (args.Length < 4)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                if (args.Length > 4)
-                {
-                    _filename = args[4];
-                }
-            }
-            else if (string.Compare(command, "WriteEdc15Eeprom", ignoreCase: true) == 0)
-            {
-                // WriteEdc15Eeprom ADDRESS1 VALUE1 [ADDRESS2 VALUE2 ... ADDRESSn VALUEn]
-
-                if (args.Length < 6)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                var dateString = DateTime.Now.ToString("s").Replace(':', '-');
-                _filename = $"EDC15_EEPROM_{dateString}.bin";
-                
-                if (!ParseAddressesAndValues(args.Skip(4).ToList(), out addressValuePairs))
-                {
-                    ShowUsage();
-                    return;
-                }
-            }
-            else if (string.Compare(command, "AdaptationRead", ignoreCase: true) == 0)
-            {
-                if (args.Length < 5)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                channel = byte.Parse(args[4]);
-
-                if (args.Length > 5)
-                {
-                    login = ushort.Parse(args[5]);
-                }
-            }
-            else if (
-                string.Compare(command, "AdaptationSave", ignoreCase: true) == 0 ||
-                string.Compare(command, "AdaptationTest", ignoreCase: true) == 0)
-            {
-                if (args.Length < 6)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                channel = byte.Parse(args[4]);
-                channelValue = ushort.Parse(args[5]);
-
-                if (args.Length > 6)
-                {
-                    login = ushort.Parse(args[6]);
-                }
-            }
-            else if (
-                string.Compare(command, "BasicSetting", ignoreCase: true) == 0 ||
-                string.Compare(command, "GroupRead", ignoreCase: true) == 0)
-            {
-                if (args.Length < 5)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                groupNumber = byte.Parse(args[4]);
-            }
-            else if (
-                string.Compare(command, "FindLogins", ignoreCase: true) == 0)
-            {
-                if (args.Length < 5)
-                {
-                    ShowUsage();
-                    return;
-                }
-
-                login = ushort.Parse(args[4]);
-            }
-
-            using var @interface = OpenPort(portName, baudRate);
-            var tester = new Tester(@interface, controllerAddress);
-            
+            // Handle command-specific arguments
             switch (command.ToLower())
             {
-                case "dumprbxmem":
-                    tester.DumpRBxMem(address, length, _filename);
-                    tester.EndCommunication();
-                    return;
-
-                case "dumprbxmemodd":
-                    tester.DumpRBxMem(address, length, _filename, evenParityWakeup: false);
-                    tester.EndCommunication();
-                    return;
-
-                case "getskc":
-                    tester.GetSkc();
-                    tester.EndCommunication();
-                    return;
-
-                case "togglerb4mode":
-                    tester.ToggleRB4Mode();
-                    tester.EndCommunication();
-                    return;
-
-                default:
-                    break;
-            }
-
-            ControllerInfo ecuInfo = tester.Kwp1281Wakeup();
-
-            switch (command.ToLower())
-            {
-                case "actuatortest":
-                    tester.ActuatorTest();
-                    break;
-
-                case "adaptationread":
-                    tester.AdaptationRead(channel, login, ecuInfo.WorkshopCode);
-                    break;
-
-                case "adaptationsave":
-                    tester.AdaptationSave(channel, channelValue, login, ecuInfo.WorkshopCode);
-                    break;
-
-                case "adaptationtest":
-                    tester.AdaptationTest(channel, channelValue, login, ecuInfo.WorkshopCode);
-                    break;
-
-                case "basicsetting":
-                    tester.BasicSettingRead(groupNumber);
-                    break;
-
-                case "clarionvwpremium4safecode":
-                    tester.ClarionVWPremium4SafeCode();
-                    break;
-
-                case "clearfaultcodes":
-                    tester.ClearFaultCodes();
-                    break;
-
-                case "delcovwpremium5safecode":
-                    tester.DelcoVWPremium5SafeCode();
-                    break;
-
-                case "dumpccmrom":
-                    tester.DumpCcmRom(_filename);
-                    break;
-
-                case "dumpclusternecrom":
-                    tester.DumpClusterNecRom(_filename);
-                    break;
-
-                case "dumpedc15eeprom":
-                {
-                    var eeprom = tester.ReadWriteEdc15Eeprom(_filename);
-                    Edc15VM.DisplayEepromInfo(eeprom);
-                }
-                    break;
-
-                case "dumpeeprom":
-                    tester.DumpEeprom(address, length, _filename);
-                    break;
-
-                case "dumpmarellimem":
-                    tester.DumpMarelliMem(address, length, ecuInfo, _filename);
-                    return;
-
-                case "dumpmem":
-                    tester.DumpMem(address, length, _filename);
-                    break;
-
-                case "dumpram":
-                    tester.DumpRam(address, length, _filename);
-                    break;
-
-                case "findlogins":
-                    tester.FindLogins(login!.Value, ecuInfo.WorkshopCode);
-                    break;
-
-                case "getclusterid":
-                    tester.GetClusterId();
-                    break;
-
-                case "groupread":
-                    tester.GroupRead(groupNumber);
-                    break;
-
-                case "loadeeprom":
-                    tester.LoadEeprom(address, _filename!);
-                    break;
-
-                case "mapeeprom":
-                    tester.MapEeprom(_filename);
-                    break;
-
                 case "readeeprom":
-                    tester.ReadEeprom(address);
-                    break;
-
                 case "readram":
-                    tester.ReadRam(address);
-                    break;
-
                 case "readrom":
-                    tester.ReadRom(address);
+                    address = Utils.ParseUint(args[4]);
                     break;
 
-                case "readfaultcodes":
-                    tester.ReadFaultCodes();
-                    break;
-
-                case "readident":
-                    tester.ReadIdent();
-                    break;
-
-                case "readsoftwareversion":
-                    tester.ReadSoftwareVersion();
-                    break;
-
-                case "reset":
-                    tester.Reset();
-                    break;
-
-                case "setsoftwarecoding":
-                    tester.SetSoftwareCoding(softwareCoding, workshopCode);
-                    break;
-
-                case "writeedc15eeprom":
-                    tester.ReadWriteEdc15Eeprom(_filename, addressValuePairs);
+                case "dumprbxmem":
+                case "dumprbxmemodd":
+                case "dumpmem":
+                case "dumpccmrom":
+                case "dumpeeprom":
+                    address = Utils.ParseUint(args[4]);
+                    length = Utils.ParseUint(args[5]);
+                    filename = args.Length > 6 ? args[6] : null;
                     break;
 
                 case "writeeeprom":
-                    tester.WriteEeprom(address, value);
+                    address = Utils.ParseUint(args[4]);
+                    value = (byte)Utils.ParseUint(args[5]);
                     break;
 
-                default:
-                    ShowUsage();
+                case "setsoftwarecoding":
+                    softwareCoding = (int)Utils.ParseUint(args[4]);
+                    workshopCode = (int)Utils.ParseUint(args[5]);
                     break;
+
+                case "adaptationread":
+                case "adaptationsave":
+                case "adaptationtest":
+                    channel = byte.Parse(args[4]);
+                    if (args.Length > 5)
+                        login = ushort.Parse(args[5]);
+                    break;
+
+                case "basicsetting":
+                case "groupread":
+                    groupNumber = byte.Parse(args[4]);
+                    break;
+
+                case "writeedc15eeprom":
+                    var dateString = DateTime.Now.ToString("s").Replace(':', '-');
+                    filename = $"EDC15_EEPROM_{dateString}.bin";
+                    if (!ParseAddressesAndValues(args.Skip(4).ToList(), out addressValuePairs))
+                        ShowUsage();
+                    break;
+
+                case "findlogins":
+                    login = ushort.Parse(args[4]);
+                    break;
+
+                case "loadEeprom":
+                    address = Utils.ParseUint(args[4]);
+                    filename = args[5];
+                    break;
+
+                    // Add more cases as needed for other commands
             }
 
-            tester.EndCommunication();
+            return new CommandArguments(address, length, value, softwareCoding, workshopCode, addressValuePairs, channel, channelValue, login, groupNumber, filename);
+        }
+
+        private static bool ExecuteCommand(string command, Tester tester, uint address, uint length, byte value, int softwareCoding, int workshopCode, List<KeyValuePair<ushort, byte>> addressValuePairs, byte channel, ushort channelValue, ushort? login, byte groupNumber, string filename)
+        {
+            switch (command)
+            {
+                case "dumprbxmem":
+                    tester.DumpRBxMem(address, length, filename);
+                    return true;
+
+                case "dumprbxmemodd":
+                    tester.DumpRBxMem(address, length, filename, evenParityWakeup: false);
+                    return true;
+
+                case "writeeeprom":
+                    tester.WriteEeprom(address, value);
+                    return true;
+
+                case "writeedc15eeprom":
+                    tester.ReadWriteEdc15Eeprom(filename, addressValuePairs);
+                    return true;
+
+                case "adaptationread":
+                    tester.AdaptationRead(channel, login, tester.Kwp1281Wakeup().WorkshopCode);
+                    return true;
+
+                case "adaptationsave":
+                    tester.AdaptationSave(channel, channelValue, login, tester.Kwp1281Wakeup().WorkshopCode);
+                    return true;
+
+                case "adaptationtest":
+                    tester.AdaptationTest(channel, channelValue, login, tester.Kwp1281Wakeup().WorkshopCode);
+                    return true;
+
+                case "basicsetting":
+                    tester.BasicSettingRead(groupNumber);
+                    return true;
+
+                case "readeeprom":
+                    tester.ReadEeprom(address);
+                    return true;
+
+                case "readram":
+                    tester.ReadRam(address);
+                    return true;
+
+                case "readrom":
+                    tester.ReadRom(address);
+                    return true;
+
+                case "clearfaultcodes":
+                    tester.ClearFaultCodes();
+                    return true;
+
+                case "getskc":
+                    tester.GetSkc();
+                    return true;
+
+                case "getclusterid":
+                    tester.GetClusterId();
+                    return true;
+
+                case "loadeeprom":
+                    tester.LoadEeprom(address, filename);
+                    return true;
+
+                case "findlogins":
+                    if (login.HasValue)
+                        tester.FindLogins(login.Value, tester.Kwp1281Wakeup().WorkshopCode);
+                    return true;
+
+                case "dumpeeprom":
+                    tester.DumpEeprom(address, length, filename);
+                    return true;
+
+                case "dumpccmrom":
+                    tester.DumpCcmRom(filename);
+                    return true;
+
+                case "dumpmem":
+                    tester.DumpMem(address, length, filename);
+                    return true;
+
+                case "dumpclusternecrom":
+                    tester.DumpClusterNecRom(filename);
+                    return true;
+
+                case "readfaultcodes":
+                    tester.ReadFaultCodes();
+                    return true;
+
+                case "readident":
+                    tester.ReadIdent();
+                    return true;
+
+                case "reset":
+                    tester.Reset();
+                    return true;
+
+                case "setsoftwarecoding":
+                    tester.SetSoftwareCoding(softwareCoding, workshopCode);
+                    return true;
+
+                case "mapeeprom":
+                    tester.MapEeprom(filename);
+                    return true;
+
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -506,6 +378,28 @@ namespace BitFab.KW1281Test
             }
         }
 
+        private static void mileageUtils()
+        {
+            // Std location for mileage in VWK501: starting from 0xFC
+            // Std location for mileage in VWK503: starting from 0x13A
+            // Location can vary depending on the cluster type
+
+            // Test data:
+            // 0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x4A, 0xE8,   0x4A, 0xE8
+            // VAG eeprom programmer 1.19g says: 97117
+            var test2 = Utils.MileageHexToDecimal("49e8 49e8 49e8 49e8 49e8 49e8 4ae8 4ae8");
+
+            // 0x8A, 0xBA, 0x8A, 0xBA, 0x8A, 0xBA, 0x8A, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA,
+            // VAG eeprom programmer 1.19g says: 284489
+            var test3 = Utils.MileageHexToDecimal("8ABA 8ABA 8ABA 8ABA 8BBA 8BBA 8BBA 8BBA");
+            var test4 = Utils.MileageHexToDecimal("8A BA 8A BA 8A BA 8A BA 8B BA 8B BA 8B BA 8B BA");
+            
+            var hex = Utils.MileageDecimalToHex(284488);
+            var dec = Utils.MileageHexToDecimal(hex);
+
+            var test = Utils.MileageHexToDecimal("fdff fdff feff feff feff feff feff feff");
+        }
+
         private static void ShowUsage()
         {
             Log.WriteLine(@"Usage: KW1281Test PORT BAUD ADDRESS COMMAND [args]
@@ -584,7 +478,5 @@ namespace BitFab.KW1281Test
             ADDRESS = Address in decimal (e.g. 4361) or hex (e.g. $1109)
             VALUE = Value in decimal (e.g. 138) or hex (e.g. $8A)");
         }
-
-        private string? _filename = null;
     }
 }
