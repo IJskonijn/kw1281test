@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 
 namespace BitFab.KW1281Test
@@ -212,6 +213,61 @@ namespace BitFab.KW1281Test
             {
                 return (byte)(b & 0x7F);
             }
+        }
+
+        public static int MileageHexToDecimal(string input)
+        {
+            // Split the input string into an array of hexadecimal strings
+            var hexValues = input.Split(' ').ToList();
+            var inputLength = hexValues.Count;
+
+            if (inputLength != 8 && inputLength != 16)
+            {
+                throw new ArgumentException("Input must contain 8 or 16 values separated by space.");
+            }
+
+            if (inputLength == 16)
+            {
+                for (int i = 0; i < inputLength; i += 2)
+                {
+                    hexValues[i / 2] = hexValues[i] + hexValues[i + 1];
+                }
+                hexValues = hexValues.Take(8).ToList();
+            }            
+
+            // Sum the bitwise inverted 16-bit signed integers
+            int sum = hexValues.Select(hex => ~BitConverter.ToInt16(new byte[] {
+                Convert.ToByte(hex.Substring(0, 2), 16),
+                Convert.ToByte(hex.Substring(2, 2), 16)
+            }, 0)).Sum();
+
+            // Multiply the sum by 2, since odometer values are stored as half the actual value
+            return sum * 2;
+        }
+
+        public static string MileageDecimalToHex(int input)
+        {
+            // Divide the input by 2, since odometer values are stored as half the actual value
+            int halfValue = input / 2;
+
+            // starting point per byte is 65535 / FFFF
+            var resultList = Enumerable.Repeat(65535, 8).ToList();
+
+            // Decrease each byte block by 1 until the half value is reached
+            for (int i = 0; i < halfValue; i++)
+            {
+                resultList[i % 8] -= 1;
+            }
+
+            var resultHexListBeforeSwap = resultList.Select(b => b.ToString("X4")).ToList();
+
+            // Swap bitwise inverted integers
+            var resultHexListAfterSwap = resultHexListBeforeSwap
+                .Select(hex => hex.Substring(2, 2) + hex.Substring(0, 2))
+                .ToList();
+
+            // Join the array of hexadecimal strings into a single string with space separator
+            return string.Join(" ", resultHexListAfterSwap);
         }
     }
 }
