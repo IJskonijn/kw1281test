@@ -70,10 +70,10 @@ namespace BitFab.KW1281Test
             // Try setting the process priority
             TrySetRealTimeProcessPriority();
 
-            string portName = args[0];
-            int baudRate = int.Parse(args[1]);
-            int controllerAddress = int.Parse(args[2], NumberStyles.HexNumber);
-            string command = args[3];
+            var portName = args[0];
+            var baudRate = int.Parse(args[1]);
+            var controllerAddress = int.Parse(args[2], NumberStyles.HexNumber);
+            var command = args[3];
 
             // Parse command-specific arguments
             if (!ParseCommandArguments(command, args, out CommandArguments commandArgs))
@@ -101,7 +101,7 @@ namespace BitFab.KW1281Test
             int workshopCode = 0;
             byte channel = 0;
             ushort channelValue = 0;
-            ushort? login = 0;
+            ushort? login = null;
             byte groupNumber = 0;
             string? filename = null;
             var addressValuePairs = new List<KeyValuePair<ushort, byte>>();
@@ -323,7 +323,7 @@ namespace BitFab.KW1281Test
                     tester.DumpRam(commandArgs.Address, commandArgs.Length, commandArgs.Filename);
                     break;
 
-                case "findcommandArgs.Logins":
+                case "findlogins":
                     tester.FindLogins(commandArgs.Login!.Value, ecuInfo.WorkshopCode);
                     break;
 
