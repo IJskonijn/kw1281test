@@ -8,23 +8,19 @@ namespace BitFab.KW1281Test
 {
     internal static class Utils
     {
-        public static string Dump(IEnumerable<byte> bytes)
+        public static string Dump(IEnumerable<byte> bytes, bool useDollarSign = false)
         {
             var sb = new StringBuilder();
             foreach (var b in bytes)
             {
-                sb.Append($" {b:X2}");
-            }
-            return sb.ToString();
-        }
-
-        // TODO: Merge with Dump()
-        public static string DumpBytes(IEnumerable<byte> bytes)
-        {
-            var sb = new StringBuilder();
-            foreach (var b in bytes)
-            {
-                sb.Append($"${b:X2} ");
+                if (useDollarSign)
+                {
+                    sb.Append($"${b:X2} ");
+                }
+                else
+                {
+                    sb.Append($" {b:X2}");
+                }
             }
             return sb.ToString();
         }
@@ -189,7 +185,7 @@ namespace BitFab.KW1281Test
             byte minuend, byte subtrahend, bool carry)
         {
             int result = minuend - subtrahend - (carry ? 0 : 1);
-            carry = !(result < 0);
+            carry = result >= 0;
 
             return ((byte)result, carry);
         }
@@ -215,6 +211,15 @@ namespace BitFab.KW1281Test
             }
         }
 
+        /// <summary>
+        /// Returns mileage in decimal format converted from hex out of a dump
+        ///   Std location for mileage in VWK501: starting from 0xFC
+        ///   Std location for mileage in VWK503: starting from 0x13A
+        ///   Location can vary depending on the cluster type
+        /// </summary>
+        /// <param name="input"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         public static int MileageHexToDecimal(string input)
         {
             // Split the input string into an array of hexadecimal strings
@@ -252,6 +257,14 @@ namespace BitFab.KW1281Test
             return sum * 2;
         }
 
+        /// <summary>
+        /// Returns mileage in hex format, usable in dumps, converted decimal
+        ///   Std location for mileage in VWK501: starting from 0xFC
+        ///   Std location for mileage in VWK503: starting from 0x13A
+        ///   Location can vary depending on the cluster type
+        /// </summary>
+        /// <param name="input"></param>
+        /// <returns></returns>
         public static string MileageDecimalToHex(int input)
         {
             // Divide the input by 2, since odometer values are stored as half the actual value

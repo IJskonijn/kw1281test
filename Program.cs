@@ -76,13 +76,13 @@ namespace BitFab.KW1281Test
             string command = args[3];
 
             // Parse command-specific arguments
-            var (address, length, value, softwareCoding, workshopCode, addressValuePairs, channel, channelValue, login, groupNumber, filename) = ParseCommandArguments(command, args);
+            var commandArgs = ParseCommandArguments(command, args);
 
             using var @interface = OpenPort(portName, baudRate);
             var tester = new Tester(@interface, controllerAddress);
 
             // Execute Command
-            if (!ExecuteCommand(command.ToLower(), tester, address, length, value, softwareCoding, workshopCode, addressValuePairs, channel, channelValue, login, groupNumber, filename))
+            if (!ExecuteCommand(command.ToLower(), tester, commandArgs))
             {
                 ShowUsage();
             }
@@ -197,52 +197,52 @@ namespace BitFab.KW1281Test
             return new CommandArguments(address, length, value, softwareCoding, workshopCode, addressValuePairs, channel, channelValue, login, groupNumber, filename);
         }
 
-        private static bool ExecuteCommand(string command, Tester tester, uint address, uint length, byte value, int softwareCoding, int workshopCode, List<KeyValuePair<ushort, byte>> addressValuePairs, byte channel, ushort channelValue, ushort? login, byte groupNumber, string filename)
+        private static bool ExecuteCommand(string command, Tester tester, CommandArguments commandArgs)
         {
             switch (command)
             {
                 case "dumprbxmem":
-                    tester.DumpRBxMem(address, length, filename);
+                    tester.DumpRBxMem(commandArgs.Address, commandArgs.Length, commandArgs.Filename);
                     return true;
 
                 case "dumprbxmemodd":
-                    tester.DumpRBxMem(address, length, filename, evenParityWakeup: false);
+                    tester.DumpRBxMem(commandArgs.Address, commandArgs.Length, commandArgs.Filename, evenParityWakeup: false);
                     return true;
 
                 case "writeeeprom":
-                    tester.WriteEeprom(address, value);
+                    tester.WriteEeprom(commandArgs.Address, commandArgs.Value);
                     return true;
 
                 case "writeedc15eeprom":
-                    tester.ReadWriteEdc15Eeprom(filename, addressValuePairs);
+                    tester.ReadWriteEdc15Eeprom(commandArgs.Filename, commandArgs.AddressValuePairs);
                     return true;
 
                 case "adaptationread":
-                    tester.AdaptationRead(channel, login, tester.Kwp1281Wakeup().WorkshopCode);
+                    tester.AdaptationRead(commandArgs.Channel, commandArgs.Login, tester.Kwp1281Wakeup().WorkshopCode);
                     return true;
 
                 case "adaptationsave":
-                    tester.AdaptationSave(channel, channelValue, login, tester.Kwp1281Wakeup().WorkshopCode);
+                    tester.AdaptationSave(commandArgs.Channel, commandArgs.ChannelValue, commandArgs.Login, tester.Kwp1281Wakeup().WorkshopCode);
                     return true;
 
                 case "adaptationtest":
-                    tester.AdaptationTest(channel, channelValue, login, tester.Kwp1281Wakeup().WorkshopCode);
+                    tester.AdaptationTest(commandArgs.Channel, commandArgs.ChannelValue, commandArgs.Login, tester.Kwp1281Wakeup().WorkshopCode);
                     return true;
 
                 case "basicsetting":
-                    tester.BasicSettingRead(groupNumber);
+                    tester.BasicSettingRead(commandArgs.GroupNumber);
                     return true;
 
                 case "readeeprom":
-                    tester.ReadEeprom(address);
+                    tester.ReadEeprom(commandArgs.Address);
                     return true;
 
                 case "readram":
-                    tester.ReadRam(address);
+                    tester.ReadRam(commandArgs.Address);
                     return true;
 
                 case "readrom":
-                    tester.ReadRom(address);
+                    tester.ReadRom(commandArgs.Address);
                     return true;
 
                 case "clearfaultcodes":
@@ -258,28 +258,29 @@ namespace BitFab.KW1281Test
                     return true;
 
                 case "loadeeprom":
-                    tester.LoadEeprom(address, filename);
+                    if (commandArgs.Filename != null)
+                        tester.LoadEeprom(commandArgs.Address, commandArgs.Filename);
                     return true;
 
                 case "findlogins":
-                    if (login.HasValue)
-                        tester.FindLogins(login.Value, tester.Kwp1281Wakeup().WorkshopCode);
+                    if (commandArgs.Login.HasValue)
+                        tester.FindLogins(commandArgs.Login.Value, tester.Kwp1281Wakeup().WorkshopCode);
                     return true;
 
                 case "dumpeeprom":
-                    tester.DumpEeprom(address, length, filename);
+                    tester.DumpEeprom(commandArgs.Address, commandArgs.Length, commandArgs.Filename);
                     return true;
 
                 case "dumpccmrom":
-                    tester.DumpCcmRom(filename);
+                    tester.DumpCcmRom(commandArgs.Filename);
                     return true;
 
                 case "dumpmem":
-                    tester.DumpMem(address, length, filename);
+                    tester.DumpMem(commandArgs.Address, commandArgs.Length, commandArgs.Filename);
                     return true;
 
                 case "dumpclusternecrom":
-                    tester.DumpClusterNecRom(filename);
+                    tester.DumpClusterNecRom(commandArgs.Filename);
                     return true;
 
                 case "readfaultcodes":
@@ -295,11 +296,11 @@ namespace BitFab.KW1281Test
                     return true;
 
                 case "setsoftwarecoding":
-                    tester.SetSoftwareCoding(softwareCoding, workshopCode);
+                    tester.SetSoftwareCoding(commandArgs.SoftwareCoding, commandArgs.WorkshopCode);
                     return true;
 
                 case "mapeeprom":
-                    tester.MapEeprom(filename);
+                    tester.MapEeprom(commandArgs.Filename);
                     return true;
 
                 default:
@@ -387,29 +388,7 @@ namespace BitFab.KW1281Test
                 Log.WriteLine($"Opening serial port {portName}");
                 return new GenericInterface(portName, baudRate);
             }
-        }
-
-        private static void mileageUtils()
-        {
-            // Std location for mileage in VWK501: starting from 0xFC
-            // Std location for mileage in VWK503: starting from 0x13A
-            // Location can vary depending on the cluster type
-
-            // Test data:
-            // 0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x49, 0xE8,   0x4A, 0xE8,   0x4A, 0xE8
-            // VAG eeprom programmer 1.19g says: 97117
-            var test2 = Utils.MileageHexToDecimal("49e8 49e8 49e8 49e8 49e8 49e8 4ae8 4ae8");
-
-            // 0x8A, 0xBA, 0x8A, 0xBA, 0x8A, 0xBA, 0x8A, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA, 0x8B, 0xBA,
-            // VAG eeprom programmer 1.19g says: 284489
-            var test3 = Utils.MileageHexToDecimal("8ABA 8ABA 8ABA 8ABA 8BBA 8BBA 8BBA 8BBA");
-            var test4 = Utils.MileageHexToDecimal("8A BA 8A BA 8A BA 8A BA 8B BA 8B BA 8B BA 8B BA");
-
-            var hex = Utils.MileageDecimalToHex(284488);
-            var dec = Utils.MileageHexToDecimal(hex);
-
-            var test = Utils.MileageHexToDecimal("fdff fdff feff feff feff feff feff feff");
-        }
+        } 
 
         private static void ShowUsage()
         {
