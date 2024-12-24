@@ -48,7 +48,7 @@ namespace BitFab.KW1281Test
 
             if (args.Length < 4)
             {
-                if (args.Length == 2 && args[0].Contains("mileage", StringComparison.OrdinalIgnoreCase))
+                if (args.Length == 2 && args[0].Contains("mileage", StringComparison.InvariantCultureIgnoreCase))
                 {
                     if (string.Equals(args[0], nameof(Utils.MileageHexToDecimal), StringComparison.InvariantCultureIgnoreCase))
                     {
