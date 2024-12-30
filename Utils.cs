@@ -303,29 +303,49 @@ namespace BitFab.KW1281Test
                 return false;
             }
 
-            var filePath = Path.GetDirectoryName(filename);
+            try
+            {
+                var filePath = Path.GetDirectoryName(filename);
+                var bytes = File.ReadAllBytes(filename);
 
-            Log.WriteLine($"Reading {filename}");
-            var bytes = File.ReadAllBytes(filename);
+                const int vwk501ChecksumLocation = 0x14E;
+                const int vwk501Region1Address = 0x14F;
+                const int vwk501Region2Address = 0x220;
 
-            const int vwk501ChecksumLocation = 0x14E;
-            const int vwk501Region1Address = 0x14F;
-            const int vwk501Region2Address = 0x220;
+                const int vwk503ChecksumLocation = 0x190;
+                const int vwk503Region1Address = 0x191;
+                const int vwk503Region2Address = 0x258;
 
-            const int vwk503ChecksumLocation = 0x190;
-            const int vwk503Region1Address = 0x191;
-            const int vwk503Region2Address = 0x258;
+                const int region1Length = 8;
+                const int region2Length = 0x20;
 
-            const int region1Length = 8;
-            const int region2Length = 0x20;
+                int checksumLocation = isVWK503 ? vwk503ChecksumLocation : vwk501ChecksumLocation;
+                int region1Address = isVWK503 ? vwk503Region1Address : vwk501Region1Address;
+                int region2Address = isVWK503 ? vwk503Region2Address : vwk501Region2Address;
 
-            int checksumLocation = isVWK503 ? vwk503ChecksumLocation : vwk501ChecksumLocation;
-            int region1Address = isVWK503 ? vwk503Region1Address : vwk501Region1Address;
-            int region2Address = isVWK503 ? vwk503Region2Address : vwk501Region2Address;
+                var oldChecksum = bytes[checksumLocation];
+                Log.WriteLine($"Old checksum: {oldChecksum:X2}");
 
-            var oldChecksum = bytes[checksumLocation];
-            Log.WriteLine($"Old checksum {oldChecksum:X2}");
+                calculatedChecksum = CalculateChecksum(bytes, region1Address, region1Length, region2Address, region2Length);
+                Log.WriteLine($"New checksum: {calculatedChecksum:X2}");
 
+                if (saveNewFile && !SaveNewFileWithChecksum(bytes, calculatedChecksum, filePath, filename, checksumLocation))
+                {
+                    Log.WriteLine("Failed to save the new file with checksum.");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine($"Error processing file {filename}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static byte CalculateChecksum(byte[] bytes, int region1Address, int region1Length, int region2Address, int region2Length)
+        {
             byte checksum = 0xFF;
 
             for (var i = region1Address; i < region1Address + region1Length; i++)
@@ -338,34 +358,43 @@ namespace BitFab.KW1281Test
                 checksum -= bytes[i];
             }
 
-            calculatedChecksum = checksum;
-            Log.WriteLine($"New checksum {calculatedChecksum:X2}");
+            return checksum;
+        }
 
-            if (saveNewFile)
+        private static bool SaveNewFileWithChecksum(byte[] bytes, byte calculatedChecksum, string filePath, string originalFileName, int checksumLocation)
+        {
+            try
             {
                 if (filePath == null || !Directory.Exists(filePath))
                 {
-                    Log.WriteLine($"Path for new file does not exist. Skip saving new file");
+                    Log.WriteLine("New file path does not exist. Skip saving new file.");
                     return false;
                 }
 
-                var newName = $"ChecksumCorrected_{Path.GetFileName(filename)}";
+                bytes[checksumLocation] = calculatedChecksum;
+
+                var newName = $"ChecksumCorrected_{Path.GetFileName(originalFileName)}";
                 var newNameLocation = Path.Combine(filePath, newName);
 
                 int attempt = 0;
                 while (File.Exists(newNameLocation) && attempt < 10)
                 {
-                    newName = $"ChecksumCorrected{attempt}_{Path.GetFileName(filename)}";
+                    newName = $"ChecksumCorrected{attempt}_{Path.GetFileName(originalFileName)}";
                     newNameLocation = Path.Combine(filePath, newName);
                     attempt++;
                 }
 
-                bytes[checksumLocation] = calculatedChecksum;
-
                 File.WriteAllBytes(newNameLocation, bytes);
-            }
+                Log.WriteLine($"New file saved at {newNameLocation}");
 
-            return true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine($"Error saving new file: {ex.Message}");
+                return false;
+            }
         }
+
     }
 }

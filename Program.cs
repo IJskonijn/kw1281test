@@ -28,13 +28,13 @@ namespace BitFab.KW1281Test
                 Log = new FileLog("KW1281Test.log");
 
                 var tester = new Program();
-                tester.Run(args);
+                //tester.Run(args);
 
-                //var testFile = @"C:\Users\Gerben\source\repos\IJskonijn\kw1281test\TestFiles\1J0920846GX.BIN";
-                //var goodtestFile = @"C:\Users\Gerben\source\repos\IJskonijn\kw1281test\TestFiles\ChecksumCorrected_old.bin";
+                var testFile = @"C:\Users\Gerben\source\repos\IJskonijn\kw1281test\TestFiles\1J0920846GX.BIN";
+                var goodtestFile = @"C:\Users\Gerben\source\repos\IJskonijn\kw1281test\TestFiles\ChecksumCorrected_old.bin";
                 
-                //Utils.CalculateChecksumForEepromFile(goodtestFile, out byte result, true);
-                //Utils.CalculateChecksumForEepromFile(testFile, out byte result2, true, true);
+                Utils.CalculateChecksumForEepromFile(goodtestFile, out byte result, isVWK503: true);
+                Utils.CalculateChecksumForEepromFile(testFile, out byte result2, isVWK503:true, saveNewFile:false);
             }
             catch (Exception ex)
             {
