@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -255,7 +257,7 @@ namespace BitFab.KW1281Test
             }, 0)).Sum();
 
             // Multiply the sum by 2, since odometer values are stored as half the actual value
-            return sum * 2;
+            return sum * 2 + 1;
         }
 
         /// <summary>
@@ -289,6 +291,81 @@ namespace BitFab.KW1281Test
 
             // Join the array of hexadecimal strings into a single string with space separator
             return string.Join(" ", resultHexListAfterSwap);
+        }
+
+        public static bool CalculateChecksumForEepromFile(string filename, out byte calculatedChecksum, bool isVWK503 = false, bool saveNewFile = false)
+        {
+            calculatedChecksum = 0;
+
+            if (!File.Exists(filename))
+            {
+                Log.WriteLine($"File {filename} does not exist.");
+                return false;
+            }
+
+            var filePath = Path.GetDirectoryName(filename);
+
+            Log.WriteLine($"Reading {filename}");
+            var bytes = File.ReadAllBytes(filename);
+
+            const int vwk501ChecksumLocation = 0x14E;
+            const int vwk501Region1Address = 0x14F;
+            const int vwk501Region2Address = 0x220;
+
+            const int vwk503ChecksumLocation = 0x190;
+            const int vwk503Region1Address = 0x191;
+            const int vwk503Region2Address = 0x258;
+
+            const int region1Length = 8;
+            const int region2Length = 0x20;
+
+            int checksumLocation = isVWK503 ? vwk503ChecksumLocation : vwk501ChecksumLocation;
+            int region1Address = isVWK503 ? vwk503Region1Address : vwk501Region1Address;
+            int region2Address = isVWK503 ? vwk503Region2Address : vwk501Region2Address;
+
+            var oldChecksum = bytes[checksumLocation];
+            Log.WriteLine($"Old checksum {oldChecksum:X2}");
+
+            byte checksum = 0xFF;
+
+            for (var i = region1Address; i < region1Address + region1Length; i++)
+            {
+                checksum -= bytes[i];
+            }
+
+            for (var i = region2Address; i < region2Address + region2Length; i++)
+            {
+                checksum -= bytes[i];
+            }
+
+            calculatedChecksum = checksum;
+            Log.WriteLine($"New checksum {calculatedChecksum:X2}");
+
+            if (saveNewFile)
+            {
+                if (filePath == null || !Directory.Exists(filePath))
+                {
+                    Log.WriteLine($"Path for new file does not exist. Skip saving new file");
+                    return false;
+                }
+
+                var newName = $"ChecksumCorrected_{Path.GetFileName(filename)}";
+                var newNameLocation = Path.Combine(filePath, newName);
+
+                int attempt = 0;
+                while (File.Exists(newNameLocation) && attempt < 10)
+                {
+                    newName = $"ChecksumCorrected{attempt}_{Path.GetFileName(filename)}";
+                    newNameLocation = Path.Combine(filePath, newName);
+                    attempt++;
+                }
+
+                bytes[checksumLocation] = calculatedChecksum;
+
+                File.WriteAllBytes(newNameLocation, bytes);
+            }
+
+            return true;
         }
     }
 }
